@@ -25,13 +25,13 @@ var commandTable = map[string]string{
 	"colorbalance": "red green blue (percentages)",
 	"colorize":     "hue (0-360) saturation (0-100) percentage (0-100)",
 	"contrast":     "value (-100, 100)",
-	"crop":         "x1 y1 x2 y2",
-	"cropsize":     "w h",
+	"crop":         "x1 y1 x2 y2 (rectangle at (x1,y1) and (x2,y2)",
+	"cropsize":     "width height",
 	"edge":         "edge filter",
 	"emboss":       "emboss image",
 	"fliph":        "flip horizontal",
 	"flipv":        "flip vertical",
-	"gamma":        "gamma value",
+	"gamma":        "value",
 	"gray":         "grayscale image",
 	"hue":          "value (-180, 180)",
 	"invert":       "invert image",
@@ -41,18 +41,19 @@ var commandTable = map[string]string{
 	"min":          "local minimum (kernel size)",
 	"opacity":      "percentage (0-100)",
 	"pixelate":     "pixels",
+	"read":         "imagefile (open source file)",
 	"resize":       "width height",
 	"resizefill":   "width height",
 	"resizefit":    "width height",
 	"rotate":       "degrees counter-clockwise",
 	"saturation":   "value (-100, 500)",
 	"sepia":        "sepia percentage (0-100)",
-	"sigmoid":      "sigmoid contrast (midpoint,factor)",
+	"sigmoid":      "sigmoid contrast (midpoint factor)",
 	"sobel":        "sobel filter",
 	"threshold":    "color threshold percentage (0-100)",
 	"transpose":    "flip horizontally and rotate 90° counter-clockwise",
 	"transverse":   "flips vertically and rotate 90° counter-clockwise",
-	"unsharp":      "unsharp mask (sigma,amount,threshold)",
+	"unsharp":      "unsharp mask (sigma amount threshold)",
 }
 
 // atof converts a string to a float32 value
@@ -90,6 +91,39 @@ func help() {
 		fmt.Fprintf(os.Stderr, helpfmt, k, commandTable[k])
 	}
 }
+
+// readimage opens a file, and returns the image and format
+func readimage(s []string, linenumber int) (image.Image, string) {
+	if len(s) < 1 {
+		perror(s, linenumber)
+	}
+	fname := s[1]
+	r, err := os.Open(fname)
+	if err != nil {
+		perror(s, linenumber)
+		return nil, ""
+	}
+	img, format, err := image.Decode(r)
+	if err != nil {
+		perror(s, linenumber)
+		return nil, ""
+	}
+	return img, format
+}
+
+// writeimage writes the image data
+func writeimage(w io.Writer, src image.Image, format string, g *gift.GIFT) {
+	dst := image.NewRGBA(g.Bounds(src.Bounds()))
+	g.Draw(dst, src)
+	switch format {
+	case "png":
+		png.Encode(w, dst)
+	case "jpeg":
+		jpeg.Encode(w, dst, nil)
+	}
+}
+
+// Image transformation functions
 
 // blur blurs the image
 func blur(s []string, g *gift.GIFT, linenumber int) {
@@ -362,27 +396,12 @@ func unsharp(s []string, g *gift.GIFT, linenumber int) {
 	g.Add(gift.UnsharpMask(sigma, amount, threshold))
 }
 
-// writeimage writes the image data
-func writeimage(w io.Writer, src image.Image, format string, g *gift.GIFT) {
-	dst := image.NewRGBA(g.Bounds(src.Bounds()))
-	g.Draw(dst, src)
-	switch format {
-	case "png":
-		png.Encode(w, dst)
-	case "jpeg":
-		jpeg.Encode(w, dst, nil)
-	}
-}
-
 // parse reads line of data, performing image operations
 func parse(s []string, g *gift.GIFT, linenumber int) {
 	if len(s) < 1 {
 		return
 	}
 	switch s[0] {
-	case "r":
-	case "w":
-	case "show":
 	case "help", "?", "h":
 		help()
 	case "blur":
@@ -421,13 +440,13 @@ func parse(s []string, g *gift.GIFT, linenumber int) {
 		avg(s, g, linenumber)
 	case "opacity":
 		opacity(s, g, linenumber)
-	case "pixelate":
+	case "pixelate", "pix":
 		pixelate(s, g, linenumber)
 	case "cropsize", "resize", "resizefill", "resizefit":
 		resize(s, g, linenumber)
-	case "rotate":
+	case "rotate", "rot":
 		rotate(s, g, linenumber)
-	case "saturation":
+	case "saturation", "sat":
 		staturation(s, g, linenumber)
 	case "sepia":
 		sepia(s, g, linenumber)
@@ -443,15 +462,29 @@ func parse(s []string, g *gift.GIFT, linenumber int) {
 }
 
 // process reads lines, parsing giftsh commands, performs image operations
-func process(w io.Writer, r io.Reader, img image.Image, format string, g *gift.GIFT, watchfile string) {
+func process(w io.Writer, r io.Reader, g *gift.GIFT, watchfile string) {
 	scanner := bufio.NewScanner(r)
 	lw := len(watchfile)
+	var src image.Image
+	var format string
+
+	// loop over lines of input, processing commands and counting lines.
 	for n := 1; scanner.Scan(); n++ {
-		t := scanner.Text()
-		if strings.HasPrefix(t, "#") || strings.HasPrefix(t, "//") {
+		t := scanner.Text()                                          // line of text
+		if strings.HasPrefix(t, "#") || strings.HasPrefix(t, "//") { // skip comments
 			continue
 		}
-		line := strings.Split(t, " ")
+
+		line := strings.Split(t, " ") // break lines into commands and arguments
+
+		if (line[0] == "r" || line[0] == "read") && len(line) > 1 { // open the source image
+			src, format = readimage(line, n)
+			if src == nil {
+				return
+			}
+			continue
+		}
+		// parse commands, processing the image
 		parse(line, g, n)
 		if lw > 0 {
 			wf, err := os.Create(watchfile)
@@ -459,17 +492,17 @@ func process(w io.Writer, r io.Reader, img image.Image, format string, g *gift.G
 				fmt.Fprintf(os.Stderr, "%v\n", err)
 				return
 			}
-			writeimage(wf, img, format, g)
+			writeimage(wf, src, format, g)
 		}
 	}
 	if lw == 0 {
-		writeimage(w, img, format, g)
+		writeimage(w, src, format, g)
 	}
 }
 
 func main() {
 	// command flags
-	var cmdfilename, imgfilename, outfilename, watchfile string
+	var cmdfilename, outfilename, watchfile string
 	var showhelp bool
 	flag.StringVar(&cmdfilename, "c", "", "script filename")
 	flag.StringVar(&outfilename, "o", "", "output filename")
@@ -479,7 +512,6 @@ func main() {
 
 	var cmdr io.Reader = os.Stdin
 	var outw io.Writer = os.Stdout
-	var imgr io.Reader
 	var err error
 
 	// if specifies show help and exit
@@ -508,29 +540,7 @@ func main() {
 		}
 	}
 
-	// check for input file
-	if len(flag.Args()) < 1 {
-		fmt.Fprintln(os.Stderr, "missing input file")
-		os.Exit(4)
-	}
-
-	// open input file
-	imgfilename = flag.Args()[0]
-	imgr, err = os.Open(imgfilename)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%v\n", err)
-		os.Exit(1)
-	}
-
-	// get the img from the input
-	src, format, err := image.Decode(imgr)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s: %v\n", imgfilename, err)
-		os.Exit(2)
-	}
-
 	// process
-	g := gift.New()
-	process(outw, cmdr, src, format, g, watchfile)
+	process(outw, cmdr, gift.New(), watchfile)
 
 }
