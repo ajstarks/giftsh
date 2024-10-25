@@ -1,0 +1,38 @@
+%YAML 1.2
+---
+# See http://www.sublimetext.com/docs/syntax.html
+file_extensions:
+  - gsh
+scope: source.giftsh
+contexts:
+  main:
+    # Strings begin and end with quotes, and use backslashes as an escape character
+    - match: '"'
+      scope: punctuation.definition.string.begin.giftsh
+      push: double_quoted_string
+
+    # Comments begin with a '//' and finish at the end of the line
+    - match: '//'
+      scope: punctuation.definition.comment.giftsh
+      push: line_comment
+
+    # Keywords
+    - match: '\b(blur|brightness|colorbalance|colorize|contrast|crop|cropsize|edge|emboss|fliph|flipv|gamma|gray|help|hue|invert|max|mean|median|min|opacity|pixelate|read|resize|resizefill|resizefit|rotate|saturation|sepia|sigmoid|sobel|threshold|transpose|transverse|unsharp)\b'
+      scope: keyword.control.giftsh
+
+    # Numbers
+    - match: '\b(-)?[0-9.]+\b'
+      scope: constant.numeric.giftsh
+
+  double_quoted_string:
+    - meta_scope: string.quoted.double.giftsh
+    - match: '\\.'
+      scope: constant.character.escape.giftsh
+    - match: '"'
+      scope: punctuation.definition.string.end.giftsh
+      pop: true
+
+  line_comment:
+    - meta_scope: comment.line.giftsh
+    - match: $\n?
+      pop: true

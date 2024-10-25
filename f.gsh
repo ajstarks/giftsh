@@ -1,8 +1,8 @@
-median 5
-// emboss
-sobel
+read ajs.jpg
+gray
 pixelate 10
-colorize 0 100 100
-invert
+emboss
+sobel
+
 
 

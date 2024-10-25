@@ -33,6 +33,7 @@ var commandTable = map[string]string{
 	"flipv":        "flip vertical",
 	"gamma":        "value",
 	"gray":         "grayscale image",
+	"help":         "show command set",
 	"hue":          "value (-180, 180)",
 	"invert":       "invert image",
 	"max":          "local maximum (kernel size)",
@@ -477,7 +478,7 @@ func process(w io.Writer, r io.Reader, g *gift.GIFT, watchfile string) {
 
 		line := strings.Split(t, " ") // break lines into commands and arguments
 
-		if (line[0] == "r" || line[0] == "read") && len(line) > 1 { // open the source image
+		if (line[0] == "read") && len(line) > 1 { // open the source image
 			src, format = readimage(line, n)
 			if src == nil {
 				return

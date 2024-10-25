@@ -1,0 +1,4 @@
+{
+	"shell_cmd": "giftsh < $file > f.jpg"
+}
+
