@@ -20,7 +20,7 @@ import (
 
 // commandTable documents commands and their arguments
 var commandTable = map[string]string{
-	"blur":         "value",
+	"blur":         "value (> 0)",
 	"brightness":   "value (-100, 100)",
 	"colorbalance": "red green blue (percentages)",
 	"colorize":     "hue (0-360) saturation (0-100) percentage (0-100)",
@@ -28,33 +28,34 @@ var commandTable = map[string]string{
 	"crop":         "x1 y1 x2 y2 (rectangle at (x1,y1) and (x2,y2)",
 	"cropsize":     "width height",
 	"edge":         "edge filter",
-	"emboss":       "emboss image",
+	"emboss":       "emboss filter",
 	"fliph":        "flip horizontal",
 	"flipv":        "flip vertical",
-	"gamma":        "value",
+	"gamma":        "value (< 1 darken, > 1 lighten)",
 	"gray":         "grayscale image",
 	"help":         "show command set",
 	"hue":          "value (-180, 180)",
 	"invert":       "invert image",
-	"max":          "local maximum (kernel size)",
-	"mean":         "local mean filter (kernel size)",
-	"median":       "local median filter (kernel size)",
-	"min":          "local minimum (kernel size)",
+	"max":          "local maximum size (odd positive integer)",
+	"mean":         "local mean size (odd positive integer)",
+	"median":       "local median size (odd positive integer)",
+	"min":          "local minimum size (odd positive integer)",
 	"opacity":      "percentage (0-100)",
 	"pixelate":     "pixels",
 	"read":         "imagefile (open source file)",
+	"reset":        "discard image edits",
 	"resize":       "width height",
 	"resizefill":   "width height",
 	"resizefit":    "width height",
 	"rotate":       "degrees counter-clockwise",
 	"saturation":   "value (-100, 500)",
 	"sepia":        "sepia percentage (0-100)",
-	"sigmoid":      "sigmoid contrast (midpoint factor)",
+	"sigmoid":      "sigmoid contrast (midpoint (0,1) factor (-10,10))",
 	"sobel":        "sobel filter",
 	"threshold":    "color threshold percentage (0-100)",
 	"transpose":    "flip horizontally and rotate 90° counter-clockwise",
 	"transverse":   "flips vertically and rotate 90° counter-clockwise",
-	"unsharp":      "unsharp mask (sigma amount threshold)",
+	"unsharp":      "unsharp mask (sigma (> 0) amount (0.5, 1.5) threshold (0, 0.05))",
 }
 
 // atof converts a string to a float32 value
@@ -87,7 +88,7 @@ func help() {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
-	fmt.Fprintf(os.Stderr, helpfmt, "Command", "Parameters")
+	fmt.Fprintf(os.Stderr, helpfmt, "Command", "Parameters\n")
 	for _, k := range keys {
 		fmt.Fprintf(os.Stderr, helpfmt, k, commandTable[k])
 	}
@@ -114,6 +115,9 @@ func readimage(s []string, linenumber int) (image.Image, string) {
 
 // writeimage writes the image data
 func writeimage(w io.Writer, src image.Image, format string, g *gift.GIFT) {
+	if src == nil {
+		return
+	}
 	dst := image.NewRGBA(g.Bounds(src.Bounds()))
 	g.Draw(dst, src)
 	switch format {
@@ -272,8 +276,8 @@ func rotate(s []string, g *gift.GIFT, linenumber int) {
 	}
 }
 
-// avg set min, max, median, and mean image kernel values
-func avg(s []string, g *gift.GIFT, linenumber int) {
+// localk sets min, max, median, and mean image local kernel values
+func localk(s []string, g *gift.GIFT, linenumber int) {
 	if len(s) < 2 {
 		perror(s, linenumber)
 		return
@@ -438,7 +442,7 @@ func parse(s []string, g *gift.GIFT, linenumber int) {
 	case "hue":
 		hue(s, g, linenumber)
 	case "min", "max", "mean", "median":
-		avg(s, g, linenumber)
+		localk(s, g, linenumber)
 	case "opacity":
 		opacity(s, g, linenumber)
 	case "pixelate", "pix":
@@ -471,14 +475,18 @@ func process(w io.Writer, r io.Reader, g *gift.GIFT, watchfile string) {
 
 	// loop over lines of input, processing commands and counting lines.
 	for n := 1; scanner.Scan(); n++ {
-		t := scanner.Text()                                          // line of text
-		if strings.HasPrefix(t, "#") || strings.HasPrefix(t, "//") { // skip comments
+		t := scanner.Text() // line of text
+
+		// skip comments
+		if strings.HasPrefix(t, "#") || strings.HasPrefix(t, "//") {
 			continue
 		}
 
-		line := strings.Split(t, " ") // break lines into commands and arguments
+		// break lines into commands and arguments
+		line := strings.Split(t, " ")
 
-		if (line[0] == "read") && len(line) > 1 { // open the source image
+		// open the source image, continue processing
+		if (line[0] == "read" || line[0] == "r") && len(line) > 1 {
 			src, format = readimage(line, n)
 			if src == nil {
 				return
@@ -487,15 +495,22 @@ func process(w io.Writer, r io.Reader, g *gift.GIFT, watchfile string) {
 		}
 		// parse commands, processing the image
 		parse(line, g, n)
+
+		// if watching, write the result
 		if lw > 0 {
 			wf, err := os.Create(watchfile)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "%v\n", err)
 				return
 			}
+			if len(line) > 0 && line[0] == "reset" {
+				g = gift.New()
+			}
 			writeimage(wf, src, format, g)
 		}
+
 	}
+	// write the final result (if not watching)
 	if lw == 0 {
 		writeimage(w, src, format, g)
 	}
@@ -543,5 +558,4 @@ func main() {
 
 	// process
 	process(outw, cmdr, gift.New(), watchfile)
-
 }
