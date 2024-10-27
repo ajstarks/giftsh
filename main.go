@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"image/gif"
 	"image/jpeg"
 	"image/png"
 	"io"
@@ -20,9 +21,9 @@ import (
 
 // commandTable documents commands and their arguments
 var commandTable = map[string]string{
-	"blur":         "value (> 0)",
+	"blur":         "value > 0",
 	"brightness":   "value (-100, 100)",
-	"colorbalance": "red green blue (percentages)",
+	"colorbalance": "red green blue (-100, 500)",
 	"colorize":     "hue (0-360) saturation (0-100) percentage (0-100)",
 	"contrast":     "value (-100, 100)",
 	"crop":         "x1 y1 x2 y2 (rectangle at (x1,y1) and (x2,y2)",
@@ -40,22 +41,22 @@ var commandTable = map[string]string{
 	"mean":         "local mean size (odd positive integer)",
 	"median":       "local median size (odd positive integer)",
 	"min":          "local minimum size (odd positive integer)",
-	"opacity":      "percentage (0-100)",
+	"opacity":      "value (0-100)",
 	"pixelate":     "pixels",
 	"read":         "imagefile (open source file)",
-	"reset":        "discard image edits",
+	"reset":        "discard image edits (watch mode only)",
 	"resize":       "width height",
 	"resizefill":   "width height",
 	"resizefit":    "width height",
 	"rotate":       "degrees counter-clockwise",
 	"saturation":   "value (-100, 500)",
-	"sepia":        "sepia percentage (0-100)",
-	"sigmoid":      "sigmoid contrast (midpoint (0,1) factor (-10,10))",
+	"sepia":        "value (0-100)",
+	"sigmoid":      "midpoint (0,1) factor (-10,10)",
 	"sobel":        "sobel filter",
 	"threshold":    "color threshold percentage (0-100)",
 	"transpose":    "flip horizontally and rotate 90° counter-clockwise",
-	"transverse":   "flips vertically and rotate 90° counter-clockwise",
-	"unsharp":      "unsharp mask (sigma (> 0) amount (0.5, 1.5) threshold (0, 0.05))",
+	"transverse":   "flip vertically and rotate 90° counter-clockwise",
+	"unsharp":      "sigma (> 0) amount (0.5, 1.5) threshold (0, 0.05)",
 }
 
 // atof converts a string to a float32 value
@@ -88,29 +89,27 @@ func help() {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
-	fmt.Fprintf(os.Stderr, helpfmt, "Command", "Parameters\n")
+	fmt.Fprintf(os.Stderr, helpfmt, "Command", "Parameters")
 	for _, k := range keys {
 		fmt.Fprintf(os.Stderr, helpfmt, k, commandTable[k])
 	}
 }
 
 // readimage opens a file, and returns the image and format
-func readimage(s []string, linenumber int) (image.Image, string) {
+func readimage(s []string, linenumber int) (image.Image, string, error) {
 	if len(s) < 1 {
 		perror(s, linenumber)
 	}
 	fname := s[1]
 	r, err := os.Open(fname)
 	if err != nil {
-		perror(s, linenumber)
-		return nil, ""
+		return nil, "", err
 	}
 	img, format, err := image.Decode(r)
 	if err != nil {
-		perror(s, linenumber)
-		return nil, ""
+		return nil, "", err
 	}
-	return img, format
+	return img, format, nil
 }
 
 // writeimage writes the image data
@@ -125,6 +124,8 @@ func writeimage(w io.Writer, src image.Image, format string, g *gift.GIFT) {
 		png.Encode(w, dst)
 	case "jpeg":
 		jpeg.Encode(w, dst, nil)
+	case "gif":
+		gif.Encode(w, dst, nil)
 	}
 }
 
@@ -296,7 +297,6 @@ func localk(s []string, g *gift.GIFT, linenumber int) {
 		g.Add(gift.Median(value, true))
 	case "mean":
 		g.Add(gift.Mean(value, true))
-
 	}
 }
 
@@ -467,11 +467,21 @@ func parse(s []string, g *gift.GIFT, linenumber int) {
 }
 
 // process reads lines, parsing giftsh commands, performs image operations
-func process(w io.Writer, r io.Reader, g *gift.GIFT, watchfile string) {
+func process(w io.Writer, r io.Reader, srcfile, watchfile string, g *gift.GIFT) {
 	scanner := bufio.NewScanner(r)
 	lw := len(watchfile)
 	var src image.Image
 	var format string
+	var err error
+
+	// if a sourefile is specified, open it
+	if len(srcfile) > 0 {
+		src, format, err = readimage([]string{"read", srcfile}, 0)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%v\n", err)
+			return
+		}
+	}
 
 	// loop over lines of input, processing commands and counting lines.
 	for n := 1; scanner.Scan(); n++ {
@@ -483,12 +493,13 @@ func process(w io.Writer, r io.Reader, g *gift.GIFT, watchfile string) {
 		}
 
 		// break lines into commands and arguments
-		line := strings.Split(t, " ")
+		line := strings.Fields(t)
 
 		// open the source image, continue processing
 		if (line[0] == "read" || line[0] == "r") && len(line) > 1 {
-			src, format = readimage(line, n)
-			if src == nil {
+			src, format, err = readimage(line, n)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "%v\n", err)
 				return
 			}
 			continue
@@ -496,7 +507,7 @@ func process(w io.Writer, r io.Reader, g *gift.GIFT, watchfile string) {
 		// parse commands, processing the image
 		parse(line, g, n)
 
-		// if watching, write the result
+		// if watching, write the result, process resets
 		if lw > 0 {
 			wf, err := os.Create(watchfile)
 			if err != nil {
@@ -518,10 +529,11 @@ func process(w io.Writer, r io.Reader, g *gift.GIFT, watchfile string) {
 
 func main() {
 	// command flags
-	var cmdfilename, outfilename, watchfile string
+	var scriptfile, outputfile, sourcefile, watchfile string
 	var showhelp bool
-	flag.StringVar(&cmdfilename, "c", "", "script filename")
-	flag.StringVar(&outfilename, "o", "", "output filename")
+	flag.StringVar(&scriptfile, "c", "", "script filename")
+	flag.StringVar(&outputfile, "o", "", "output filename")
+	flag.StringVar(&sourcefile, "f", "", "source image filename")
 	flag.StringVar(&watchfile, "w", "", "file to watch changes interactively")
 	flag.BoolVar(&showhelp, "h", false, "show command set")
 	flag.Parse()
@@ -539,8 +551,8 @@ func main() {
 	}
 
 	// process input for the script
-	if len(cmdfilename) > 0 {
-		cmdr, err = os.Open(cmdfilename)
+	if len(scriptfile) > 0 {
+		cmdr, err = os.Open(scriptfile)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "%v\n", err)
 			os.Exit(2)
@@ -548,8 +560,8 @@ func main() {
 	}
 
 	// process output file destination
-	if len(outfilename) > 0 {
-		outw, err = os.Create(outfilename)
+	if len(outputfile) > 0 {
+		outw, err = os.Create(outputfile)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "%v\n", err)
 			os.Exit(3)
@@ -557,5 +569,5 @@ func main() {
 	}
 
 	// process
-	process(outw, cmdr, gift.New(), watchfile)
+	process(outw, cmdr, sourcefile, watchfile, gift.New())
 }
