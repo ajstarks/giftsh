@@ -44,6 +44,7 @@ blur            value > 0
 brightness      value (-100, 100)
 colorbalance    red green blue (-100, 500)
 colorize        hue (0-360) saturation (0-100) percentage (0-100)
+colorspace      l for linear->sRGB or s for sRGB->linear
 contrast        value (-100, 100)
 crop            x1 y1 x2 y2 (rectangle at (x1,y1) and (x2,y2)
 cropsize        width height

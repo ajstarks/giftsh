@@ -25,6 +25,7 @@ var commandTable = map[string]string{
 	"brightness":   "value (-100, 100)",
 	"colorbalance": "red green blue (-100, 500)",
 	"colorize":     "hue (0-360) saturation (0-100) percentage (0-100)",
+	"colorspace":   "l for linear->sRGB or s for sRGB->linear",
 	"contrast":     "value (-100, 100)",
 	"crop":         "x1 y1 x2 y2 (rectangle at (x1,y1) and (x2,y2)",
 	"cropsize":     "width height",
@@ -172,6 +173,22 @@ func colorize(s []string, g *gift.GIFT, linenumber int) {
 	}
 	chue, csaturation, cpercent := atof(s[1]), atof(s[2]), atof(s[3])
 	g.Add(gift.Colorize(chue, csaturation, cpercent))
+}
+
+// colorspace converts to and from linear and sRGB colorspaces
+func colorspace(s []string, g *gift.GIFT, linenumber int) {
+	if len(s) < 2 {
+		perror(s, linenumber)
+		return
+	}
+	switch s[1] {
+	case "linear", "l":
+		g.Add(gift.ColorspaceSRGBToLinear())
+	case "sRGB", "s":
+		g.Add(gift.ColorspaceLinearToSRGB())
+	default:
+		perror(s, linenumber)
+	}
 }
 
 // opacity sets the image opacity (0-100%)
@@ -417,6 +434,8 @@ func parse(s []string, g *gift.GIFT, linenumber int) {
 		colorbalance(s, g, linenumber)
 	case "colorize":
 		colorize(s, g, linenumber)
+	case "colorspace":
+		colorspace(s, g, linenumber)
 	case "contrast":
 		contrast(s, g, linenumber)
 	case "crop":
