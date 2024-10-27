@@ -31,20 +31,18 @@ The -w option writes the result after each command.
 ```
 Usage of giftsh:
   -c filename (script file)
-  -h show command set
   -o filename (result file)
-  -w file     (file to watch changes interactively)
+  -w filename (file to watch changes interactively)
+  -h          (show command set)
 ```
 
 ## command set
 
-
 ```
 Command         Parameters
-
-blur            value (> 0)
+blur            value > 0
 brightness      value (-100, 100)
-colorbalance    red green blue (percentages)
+colorbalance    red green blue (-100, 500)
 colorize        hue (0-360) saturation (0-100) percentage (0-100)
 contrast        value (-100, 100)
 crop            x1 y1 x2 y2 (rectangle at (x1,y1) and (x2,y2)
@@ -62,20 +60,20 @@ max             local maximum size (odd positive integer)
 mean            local mean size (odd positive integer)
 median          local median size (odd positive integer)
 min             local minimum size (odd positive integer)
-opacity         percentage (0-100)
+opacity         value (0-100)
 pixelate        pixels
 read            imagefile (open source file)
-reset           discard image edits
+reset           discard image edits (watch mode only)
 resize          width height
 resizefill      width height
 resizefit       width height
 rotate          degrees counter-clockwise
 saturation      value (-100, 500)
-sepia           sepia percentage (0-100)
-sigmoid         sigmoid contrast (midpoint (0,1) factor (-10,10))
+sepia           value (0-100)
+sigmoid         midpoint (0,1) factor (-10,10)
 sobel           sobel filter
 threshold       color threshold percentage (0-100)
 transpose       flip horizontally and rotate 90° counter-clockwise
-transverse      flips vertically and rotate 90° counter-clockwise
-unsharp         unsharp mask (sigma (> 0) amount (0.5, 1.5) threshold (0, 0.05))
+transverse      flip vertically and rotate 90° counter-clockwise
+unsharp         sigma (> 0) amount (0.5, 1.5) threshold (0, 0.05)
 ```
