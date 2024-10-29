@@ -515,7 +515,7 @@ func process(w io.Writer, r io.Reader, srcfile, watchfile string, g *gift.GIFT) 
 		line := strings.Fields(t)
 
 		// open the source image, continue processing
-		if (line[0] == "read" || line[0] == "r") && len(line) > 1 {
+		if len(line) > 1 && (line[0] == "read" || line[0] == "r") {
 			src, format, err = readimage(line, n)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "%v\n", err)
