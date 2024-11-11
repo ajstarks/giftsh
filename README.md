@@ -36,6 +36,8 @@ Usage of giftsh:
   -h          (show command set)
 ```
 
+if you specify -w, don't specify -o.
+
 ## command set
 
 ```
