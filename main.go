@@ -161,7 +161,7 @@ func colorbalance(s []string, g *gift.GIFT, linenumber int) {
 		perror(s, linenumber)
 		return
 	}
-	pctred, pctblue, pctgreen := atof(s[1]), atof(s[2]), atof(s[3])
+	pctred, pctgreen, pctblue := atof(s[1]), atof(s[2]), atof(s[3])
 	g.Add(gift.ColorBalance(pctred, pctgreen, pctblue))
 }
 
